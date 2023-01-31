@@ -11,7 +11,7 @@ const MiddlewarePage = ({ data }: any) => {
 };
 
 export const getServerSideProps: GetServerSideProps = async () => {
-  const res = await fetch(`${process.env.SITE_URL}/api/getDate`);
+  const res = await fetch('https://main.d2ewcijckzgu5l.amplifyapp.com/api/getDate');
   const data = await res.json();
 
   return { props: { data } };
