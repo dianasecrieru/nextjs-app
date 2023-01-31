@@ -1,0 +1,101 @@
+DEPLOY_CONTEXT: ${env.DEPLOY_CONTEXT}
+DEPLOY_STAGE: ${env.DEPLOY_STAGE}
+APP_NAME: ${env.APP_NAME}
+CDN_NAME: ${env.CDN_NAME}
+MOCK_SSM_PARAM_BUILD_PHASE: ${env.SSM_PARAM_BUILD_MOCK_SLS}
+SSM_BASE_PATH: ${env.SSM_BASE_PATH}
+SLS_RESOURCE_BASE_NAME: ${env.SLS_RESOURCE_BASE_NAME}
+SLS_RESOURCE_BASE_PATH: ${env.SLS_RESOURCE_BASE_PATH}
+
+ssmParameters:
+  component: '../../libs/serverless/components/aws-parameter-store/src'
+  inputs:
+    parameters:
+      - name: realtimeLogConfigArn
+        path: ${SSM_BASE_PATH}/${APP_NAME}/cloudfront/realtime_log_config
+        buildPhaseMock: ${MOCK_SSM_PARAM_BUILD_PHASE}
+      - name: distributionId
+        path: ${SSM_BASE_PATH}/${APP_NAME}/cloudfront/distribution/id
+        buildPhaseMock: ${MOCK_SSM_PARAM_BUILD_PHASE}
+      - name: originAccessIdentityId
+        path: ${SSM_BASE_PATH}/${APP_NAME}/cloudfront/origin/access/id
+        buildPhaseMock: ${MOCK_SSM_PARAM_BUILD_PHASE}
+      - name: affiliatesBucketDomain
+        path: ${SSM_BASE_PATH}/affiliates-feed-upload/bucket/domain
+        buildPhaseMock: ${MOCK_SSM_PARAM_BUILD_PHASE}
+      - name: resourceKey
+        path: ${SSM_BASE_PATH}/${APP_NAME}/cloudfront/origin/resources/key
+      - name: webAclId
+        path: ${SSM_BASE_PATH}/${APP_NAME}/waf/webacl/arn
+        buildPhaseMock: ${MOCK_SSM_PARAM_BUILD_PHASE}
+        optional: true
+    region: ${env.AWS_REGION}
+
+storefront-ui:
+  component: '../../node_modules/@sls-next/serverless-component'
+  inputs:
+
+    # build config
+    nextConfigDir: "../../dist/apps/${APP_NAME}"
+    build:
+      enabled: ${env.APP_BUILD_ENABLED}
+      cmd: nx
+      args: [app-build, "${APP_NAME}"]
+      cwd: "../../"
+      env:
+        STOREFRONT_BRXM_BASE_URL: ${env.STOREFRONT_BRXM_BASE_URL}
+        AUTHOR_BRXM_BASE_URL: ${env.STOREFRONT_AUTHOR_BRXM_BASE_URL}
+
+    deploy: ${env.APP_DEPLOY_ENABLED}
+
+    # deployment details - bucket and lambda names, CloudFront configuration
+    bucketName: ${env.STOREFRONT_CDN_BUCKET_NAME}
+    bucketRegion: ${env.AWS_REGION}
+    name:
+      defaultLambda:  ${SLS_RESOURCE_BASE_NAME}-${APP_NAME}-default-lambda
+      apiLambda: ${SLS_RESOURCE_BASE_NAME}-${APP_NAME}-api-lambda
+      imageLambda: ${SLS_RESOURCE_BASE_NAME}-${APP_NAME}-image-lambda
+    cloudfront:
+      distributionId: ${ssmParameters.distributionId}
+      priceClass: ${env.STOREFRONT_CDN_PRICE_CLASS}
+      originAccessIdentityId: ${ssmParameters.originAccessIdentityId}
+      webACLId: ${ssmParameters.webAclId}
+      defaults:
+        realtimeLogConfigArn: ${ssmParameters.realtimeLogConfigArn}
+        viewerProtocolPolicy: redirect-to-https
+      origins:
+        - url: ${ssmParameters.affiliatesBucketDomain}
+          private: true
+          pathPatterns:
+            sitemap.xml:
+              minTTL: 0
+              defaultTTL: 0
+              maxTTL: 31536000
+              viewerProtocolPolicy: redirect-to-https
+            '*/sitemap.xml':
+              minTTL: 0
+              defaultTTL: 0
+              maxTTL: 31536000
+              viewerProtocolPolicy: redirect-to-https
+            robots.txt:
+              minTTL: 0
+              defaultTTL: 0
+              maxTTL: 31536000
+              viewerProtocolPolicy: redirect-to-https
+            '*/feeds/*':
+              minTTL: 0
+              defaultTTL: 0
+              maxTTL: 31536000
+              viewerProtocolPolicy: redirect-to-https
+            '.well-known/*':
+              minTTL: 0
+              defaultTTL: 0
+              maxTTL: 31536000
+              viewerProtocolPolicy: redirect-to-https
+      errorPages:
+        - code: 502
+          path: '/500.html'
+        - code: 503
+          path: '/500.html'
+        - code: 504
+          path: '/500.html'
